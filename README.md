@@ -10,7 +10,7 @@ In this paper, we formulate a simple yet effective two-branch design of unsuperv
 
 Qualitative visualizations of segmentation results:
 
-<img src="./asset/teaser.png" width="500" height="380"/>
+<img src="./asset/teaser.png" width="500" height="250"/>
 
 
 
