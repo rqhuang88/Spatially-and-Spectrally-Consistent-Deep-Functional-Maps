@@ -1,6 +1,6 @@
 # Paper
 Spatially and Spectrally Consistent Deep Functional Maps  <br/>
-[Mingze Sun]<sup>1</sup>, [Shiwei Mao]<sup>1</sup>, [Puhua Jiang]<sup>1,2</sup>,  [Maks Ovsjanikov]<sup>3</sup>, [Ruqi Huang]<sup>1</sup>
+[Mingze Sun]<sup>1</sup>, [Shiwei Mao]<sup>1</sup>, [Puhua Jiang]<sup>1,2</sup>,  [Maks Ovsjanikov]<sup>3</sup>, [Ruqi Huang]<sup>1</sup> <br/>
 <sup>1 </sup>Tsinghua Shenzhen International Graduate School, China,   <sup>2 </sup>Peng Cheng Laboratory, China,  <br/>
 <sup>3 </sup>LIX, Ecole polytechnique, IP Paris, France <br/>
 ICCV, 2023 <br/>
@@ -10,7 +10,7 @@ In this paper, we formulate a simple yet effective two-branch design of unsuperv
 
 Qualitative visualizations of segmentation results:
 
-![image](./asset/teaser.png)
+<img src="./asset/teaser.png" width="500" height="380"/>
 
 
 
