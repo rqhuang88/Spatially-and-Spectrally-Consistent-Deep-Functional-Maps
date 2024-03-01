@@ -12,10 +12,29 @@ Qualitative visualizations of segmentation results:
 
 <img src="./asset/teaser.png" width="500" height="200"/>
 
+# Installing Dependencies
+Dependencies can be installed using:
+``` bash
+pip install -r requirements.txt
+```
+
+# Datasets
+Within each dataset folder, the following structure is expected:
+
+    SCPAE_r/
+    ├── shapes_train
+    └── shapes_test
+    └── corres
+
+
+# Training
+```bash
+python train.py --config scape_r
+```
 
 
 # Citation
-If you find this repository useful, please consider citing Alice paper:
+If you find this repository useful, please consider citing our paper:
 ```
 @inproceedings{sun2023spatially,
   title={Spatially and Spectrally Consistent Deep Functional Maps},
