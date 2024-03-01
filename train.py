@@ -6,7 +6,7 @@ from scape_dataset import ScapeDataset, shape_to_device
 # from dt4d_dataset import ScapeDataset, shape_to_device
 # from garmcap_dataset import ScapeDataset, shape_to_device
 from model import DQFMNet
-from utils import DQFMLoss, augment_batch, augment_batch_sym
+from utils import DQFMLoss, augment_batch
 from sklearn.neighbors import NearestNeighbors
 #
 import numpy as np
@@ -37,7 +37,6 @@ def knnsearch(x, y, alpha):
     distance = torch.cdist(x.float(), y.float())
     # distance = euclidean_dist(x, y)
     output = F.softmax(-alpha*distance, dim=-1)
-    # _, idx = distance.topk(k=k, dim=-1)
     return output
 
 
@@ -77,26 +76,19 @@ def train_net(cfg):
     # standard structured (source <> target) vts dataset
     if cfg["dataset"]["type"] == "vts":
         train_dataset = ScapeDataset(dataset_path_train, name=cfg["dataset"]["name"]+"-"+cfg["dataset"]["subset"],
-                                     k_eig=cfg["fmap"]["k_eig"],
-                                     n_fmap=cfg["fmap"]["n_fmap"], n_cfmap=cfg["fmap"]["n_cfmap"],
-                                     with_wks=with_wks, with_sym=cfg["dataset"]["with_sym"],
-                                     use_cache=True, op_cache_dir=op_cache_dir, train=True)
+                                     k_eig=cfg["fmap"]["k_eig"], n_fmap=cfg["fmap"]["n_fmap"],
+                                     with_wks=with_wks, use_cache=True, 
+                                     op_cache_dir=op_cache_dir, train=True)
 
         test_dataset = ScapeDataset(dataset_path_test, name=cfg["dataset"]["name"] + "-" + cfg["dataset"]["subset"],
-                                    k_eig=cfg["fmap"]["k_eig"],
-                                    n_fmap=cfg["fmap"]["n_fmap"], n_cfmap=cfg["fmap"]["n_cfmap"],
-                                    with_wks=with_wks, with_sym=cfg["dataset"]["with_sym"],
-                                    use_cache=True, op_cache_dir=op_cache_dir, train=False)
+                                    k_eig=cfg["fmap"]["k_eig"], n_fmap=cfg["fmap"]["n_fmap"],
+                                    with_wks=with_wks, use_cache=True, 
+                                    op_cache_dir=op_cache_dir, train=False)
     # else not implemented
     else:
         raise NotImplementedError("dataset not implemented!")
 
     # data loader
-    # sampler_train = torch.utils.data.RandomSampler(train_dataset, replacement=True, num_samples=int(len(train_dataset) * 0.6))
-#     sampler_test = torch.utils.data.RandomSampler(test_dataset, replacement=True, num_samples=int(len(test_dataset) * 0.5))
-    
-    # train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=None, sampler=sampler_train)
-#     test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=None, sampler=sampler_test)
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=None, shuffle=True)
     test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=None, shuffle=False)
 
@@ -122,51 +114,28 @@ def train_net(cfg):
             for param_group in optimizer.param_groups:
                 param_group['lr'] = lr
 
-        loss_sum, loss_ortho_sum, loss_bij_sum, loss_res_sum = 0, 0, 0, 0
-        iterations = 0
         alpha_i = alpha_list[epoch-1]
         dqfm_net.train()
         for i, data in tqdm(enumerate(train_loader)):
             data = shape_to_device(data, device)
             # data augmentation (if we have wks descriptors we use sym augmentation)
             if True and with_wks is None:
-                # data = augment_batch(data, rot_x=180, rot_y=180, rot_z=180,
-                #                      std=0.01, noise_clip=0.05,
-                #                      scale_min=0.9, scale_max=1.1)
                 data = augment_batch(data, rot_x=0, rot_y=180, rot_z=0,
                                      std=0.01, noise_clip=0.05,
                                      scale_min=0.9, scale_max=1.1)
 
             # prepare iteration data
             C12_gt, C21_gt = data["C12_gt"].unsqueeze(0), data["C21_gt"].unsqueeze(0)
-            C12_pred, C21_pred, Q_pred, feat1, feat2, evecs_trans1, evecs_trans2, evecs1, evecs2 = dqfm_net(data)
+            C12_pred, C21_pred, feat1, feat2, evecs_trans1, evecs_trans2, evecs1, evecs2 = dqfm_net(data)
             
             A1 = torch.bmm(evecs_trans1.unsqueeze(0), feat1)
             A2 = torch.bmm(evecs_trans2.unsqueeze(0), feat2)
             C12_pred_new, C21_pred_new = convert_C(evecs1, evecs2, A1, A2, alpha_i)
-            # C12_pred_new, C21_pred_new = C12_pred, C21_pred
 
-            loss, loss_gt_old, loss_gt, loss_ortho, loss_bij, loss_res = criterion(C12_gt, C21_gt, C12_pred.to(device), C21_pred.to(device), C12_pred_new.to(device), C21_pred_new.to(device))
+            loss, loss_gt, loss_ortho, loss_bij, loss_res = criterion(C12_gt, C21_gt, C12_pred.to(device), C21_pred.to(device), C12_pred_new.to(device), C21_pred_new.to(device))
             loss.backward()
             optimizer.step()
             optimizer.zero_grad()
-
-            # log
-            # iterations += 1
-            # loss_sum += loss
-            # loss_ortho_sum += loss_ortho
-            # loss_bij_sum += loss_bij
-            # loss_res_sum += loss_res
-
-#             log_batch = (i + 1) % cfg["misc"]["log_interval"] == 0
-#             if log_batch:
-#                 print(f"epoch:{epoch}, loss:{loss_sum/iterations}, gt_old_loss:{loss_gt_old_sum/iterations}, "
-#                       f"ortho_loss:{loss_ortho_sum/iterations}, bij_loss:{loss_bij_sum/iterations}, "
-#                       f"res_loss:{loss_res_sum/iterations}")
-        
-#         print(f"epoch:{epoch}, loss:{loss_sum/iterations}, "
-#                       f"ortho_loss:{loss_ortho_sum/iterations}, bij_loss:{loss_bij_sum/iterations}, "
-#                       f"res_loss:{loss_res_sum/iterations}")
 
         with torch.no_grad():
             eval_loss = 0
@@ -178,14 +147,13 @@ def train_net(cfg):
                 data = shape_to_device(data, device)
                 optimizer.zero_grad()
                 C12_gt, C21_gt = data["C12_gt"].unsqueeze(0), data["C21_gt"].unsqueeze(0)
-                C12_pred, C21_pred, Q_pred, feat1, feat2, evecs_trans1, evecs_trans2, evecs1, evecs2 = dqfm_net(data)
+                C12_pred, C21_pred, feat1, feat2, evecs_trans1, evecs_trans2, evecs1, evecs2 = dqfm_net(data)
                 
                 A1 = torch.bmm(evecs_trans1.unsqueeze(0), feat1)
                 A2 = torch.bmm(evecs_trans2.unsqueeze(0), feat2)
                 C12_pred_new, C21_pred_new = convert_C(evecs1, evecs2, A1, A2, alpha_i)
-                # C12_pred_new, C21_pred_new = C12_pred, C21_pred
 
-                loss, loss_gt_old, loss_gt, loss_ortho, loss_bij, loss_res = criterion(C12_gt, C21_gt, C12_pred.to(device), C21_pred.to(device), C12_pred_new.to(device), C21_pred_new.to(device))
+                loss, loss_gt, loss_ortho, loss_bij, loss_res = criterion(C12_gt, C21_gt, C12_pred.to(device), C21_pred.to(device), C12_pred_new.to(device), C21_pred_new.to(device))
                 val_iters += 1
                 eval_loss += loss
                 eval_ortho_loss += loss_ortho
@@ -205,7 +173,7 @@ def train_net(cfg):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Launch the training of DQFM model.")
-    parser.add_argument("--config", type=str, default="smal_r", help="Config file name")
+    parser.add_argument("--config", type=str, default="scape_r", help="Config file name")
 
     args = parser.parse_args()
     cfg = yaml.safe_load(open(f"./config/{args.config}.yaml", "r"))

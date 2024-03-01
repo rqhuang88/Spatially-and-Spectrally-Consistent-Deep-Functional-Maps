@@ -14,16 +14,14 @@ class FrobeniusLoss(nn.Module):
 
 
 class DQFMLoss(nn.Module):
-    def __init__(self, w_gt=True, w_ortho=1, w_Qortho=1, w_bij=1, w_res=1, w_rank=-0.01):
+    def __init__(self, w_gt=True, w_ortho=1, w_bij=1, w_res=1):
         super().__init__()
 
         # loss HP
         self.w_gt = w_gt
         self.w_ortho = w_ortho
-        self.w_Qortho = w_Qortho
         self.w_bij = w_bij
         self.w_res = w_res
-        self.w_rank = w_rank
         # frob loss function
         self.frob_loss = FrobeniusLoss()
 
@@ -31,16 +29,12 @@ class DQFMLoss(nn.Module):
         self.gt_loss = 0
         self.gt_old_loss = 0
         self.ortho_loss = 0
-        self.Qortho_loss = 0
         self.bij_loss = 0
         self.res_loss = 0
-        self.rank_loss = 0
-    def forward(self, C12_gt, C21_gt, C12, C21, C12_new, C21_new, Q12, feat1, feat2, evecs_trans1, evecs_trans2):
+    def forward(self, C12_gt, C21_gt, C12, C21, C12_new, C21_new):
         loss = 0
-
         # gt loss (if we train on ground-truth then return directly)
-        self.gt_old_loss = (self.frob_loss(C12, C12_gt) / self.frob_loss(0, C12_gt)  + self.frob_loss(C21, C21_gt) / self.frob_loss(0, C21_gt)) / 2
-        self.gt_loss = (self.frob_loss(C12_new, C12_gt) / self.frob_loss(0, C12_gt)  + self.frob_loss(C21_new, C21_gt) / self.frob_loss(0, C21_gt)) / 2
+        self.gt_loss = (self.frob_loss(C12, C12_gt) / self.frob_loss(0, C12_gt)  + self.frob_loss(C21, C21_gt) / self.frob_loss(0, C21_gt)) / 2
         if self.w_gt:
             loss = self.gt_loss
             return loss
@@ -54,7 +48,6 @@ class DQFMLoss(nn.Module):
             CCt12_new = C12_new @ C12_new.transpose(1, 2)
             CCt21_new = C21_new @ C21_new.transpose(1, 2)
             self.ortho_loss = (self.frob_loss(CCt12, I) + self.frob_loss(CCt21, I) + self.frob_loss(CCt12_new, I) + self.frob_loss(CCt21_new, I)) * self.w_ortho / 2
-            # self.ortho_loss = (self.frob_loss(CCt12, I) + self.frob_loss(CCt21, I)) * self.w_ortho
             loss += self.ortho_loss
 
         # fmap bij loss
@@ -68,28 +61,8 @@ class DQFMLoss(nn.Module):
             self.res_loss *= self.w_res
             loss += self.res_loss
 
-        if self.w_rank < 0:
-            F_hat = torch.bmm(evecs_trans1, feat1)
-            G_hat = torch.bmm(evecs_trans2, feat2)
-            F = F_hat @ F_hat.transpose(1, 2)
-            G = G_hat @ G_hat.transpose(1, 2)
-            I = torch.eye(F.shape[1]).unsqueeze(0).to(F.device)
-            rank_pen = 0
-            for i in range(F_hat.shape[0]):
-                rank_pen += F_hat[i].norm(p='nuc') + G_hat[i].norm(p='nuc')
-            self.rank_loss = rank_pen
-            #self.rank_loss = self.frob_loss(F+G, 2*I)
-            self.rank_loss *= self.w_rank
-            # loss += self.rank_loss
 
-        # qfmap ortho loss
-        if Q12 is not None and self.w_Qortho > 0:
-            I = torch.eye(Q12.shape[1]).unsqueeze(0).to(Q12.device)
-            CCt = Q12 @ torch.conj(Q12.transpose(1, 2))
-            self.Qortho_loss = self.frob_loss(CCt, I) * self.w_Qortho
-            loss += self.Qortho_loss
-
-        return [loss, self.gt_old_loss, self.gt_loss, self.ortho_loss, self.bij_loss, self.res_loss, self.rank_loss]
+        return [loss, self.gt_loss, self.ortho_loss, self.bij_loss, self.res_loss]
 
 
 def get_mask(evals1, evals2, gamma=0.5, device="cpu"):
@@ -318,3 +291,17 @@ def read_geodist(mat):
         SQ_s = 1
 
     return G_s, SQ_s
+
+
+def ICP_rot(source, target, T12):
+    target_T = target.squeeze()[T12.squeeze()]
+    target_nodes = target_T
+    source_nodes = source.squeeze()
+    SS = torch.transpose(source_nodes, 1, 0).matmul(target_nodes)
+
+    U, S, V = torch.svd(SS)
+    R = V.matmul(torch.transpose(U,1,0))
+    Target_new = target.matmul(R)
+
+    return Target_new
+
