@@ -32,6 +32,11 @@ Within each dataset folder, the following structure is expected:
 python train.py --config scape_r
 ```
 
+# Testing
+```bash
+python eval.py --config scape_r --model_path ckpt.pth --save_path results_path
+```
+
 
 # Citation
 If you find this repository useful, please consider citing our paper:
